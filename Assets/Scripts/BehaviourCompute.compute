@@ -1,0 +1,74 @@
+#pragma kernel CSMain // Each #kernel tells which function to compile; you can have many kernels
+static const int threadGroupSize = 1024;
+
+struct Boid
+{
+	float3 position;
+	float3 direction;
+
+	float3 flockCentre;
+	float3 flockOrientation;
+	float3 flockRepulsion;
+	float3 huntingTarget;
+	float3 fleeingTarget;
+
+	float viewRadius;
+	float repulsionRadius;
+	float huntingRadius;
+	float fleeingRadius;
+
+	float trophic;
+
+	int flockMateCount;
+};
+
+RWStructuredBuffer<Boid> boids;
+int boidsCount;
+
+[numthreads(threadGroupSize, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+
+	for (int i = 0; i < boidsCount; i++)
+	{
+		float sqrView = boids[id.x].viewRadius * boids[id.x].viewRadius;
+		float sqrRepulse = boids[id.x].repulsionRadius * boids[id.x].repulsionRadius;
+		float sqrFleeing = boids[id.x].fleeingRadius * boids[id.x].fleeingRadius;
+		float sqrHunting = boids[id.x].huntingRadius * boids[id.x].huntingRadius;
+		if (id.x != i)
+		{
+			Boid boidB = boids[i];
+			float3 offset = boidB.position - boids[id.x].position;
+			float sqrDst = offset.x * offset.x + offset.y * offset.y + offset.z * offset.z;
+			if (boidB.trophic > boids[id.x].trophic)//fleeing response
+			{
+				if (sqrDst <= sqrFleeing)
+				{
+					boids[id.x].fleeingTarget -= offset / sqrDst;
+				}
+			}
+			else if (boidB.trophic == boids[id.x].trophic)//fellow flockmate response
+			{
+				if (sqrDst <= sqrView)
+				{
+					boids[id.x].flockMateCount++;
+
+					boids[id.x].flockCentre += boidB.position;
+					boids[id.x].flockOrientation += boidB.direction;
+					if (sqrDst <= sqrRepulse)
+					{
+						boids[id.x].flockRepulsion -= offset / sqrDst;
+					}
+				}
+			}
+			else if (boidB.trophic < boids[id.x].trophic)//hunting response
+			{
+				if (sqrDst <= sqrHunting)
+				{
+					boids[id.x].flockCentre += boidB.position;
+					boids[id.x].flockOrientation += boidB.direction;
+				}
+			}
+		}
+	}
+}
